@@ -1,41 +1,71 @@
 package main
 
-const (
-	calendar = "https://www.iaai.com/LiveAuctionsCalendar"
+import (
+	"database/sql"
+	"flag"
+	"fmt"
+	_ "github.com/go-sql-driver/mysql"
+	"log"
+	"time"
 )
 
-type Auction struct {
-	date         string
-	saleListLink string
+var (
+	actionType string
+)
+
+func init() {
+	flag.StringVar(
+		&actionType,
+		"type",
+		"!parse",
+		"Go parser action type",
+	)
 }
 
 func main() {
-	/*auctions := make([]Auction, 100)
-	res, err := http.Get(calendar)
+	now := time.Now()
+	flag.Parse()
+	db, err := newDb()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer res.Body.Close()
+	defer db.Close()
+	parser := NewParser(db)
+	defer parser.cancel()
 
-	if res.StatusCode != 200 {
-		log.Fatalf("Response code equals %d", res.StatusCode)
+	if actionType != "parse" {
+		getBuyNow(parser)
+		return
 	}
+	parseLots(parser)
+	fmt.Printf("Время выполнения %g секунд\n", time.Now().Sub(now).Seconds())
+}
 
-	doc, err := goquery.NewDocumentFromReader(res.Body)
+func newDb() (*sql.DB, error) {
+	db, err := sql.Open("mysql", "root:@tcp(localhost:3306)/parser")
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+	if err = db.Ping(); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
-	doc.Find("body").Each(func (i int, s *goquery.Selection) {
-		date := s.Find("data-list data-list--block")
-		link, ok := s.Find("table-cell--status a").Attr("href")
-		if !ok {
-			return
-		}
-		auctions = append(auctions, Auction{
-			date: date.Contents().Text(),
-			saleListLink: link,
-		})
-	})*/
+func parseLots(parser *Parser) {
+	parser.getAuctions()
+	parser.getAllLots()
+	parser.clearOldLots()
+	parser.insertLots()
+}
 
+func getBuyNow(parser *Parser) {
+	parser.getLotsFromDB()
+	if len(parser.lots) == 0 {
+		fmt.Println("Отсутствуют лоты для проверки")
+		return
+	}
+	parser.getBuyNowLots()
+	//parser.clearOldLots()
+	parser.insertLots()
 }
