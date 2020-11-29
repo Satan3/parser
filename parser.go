@@ -44,6 +44,24 @@ func NewParser(db *sql.DB) *Parser {
 	}
 }
 
+func (p *Parser) parse() {
+	p.getAuctions()
+	p.getAllLots()
+	p.clearOldLots()
+	p.insertLots()
+}
+
+func (p *Parser) actualizeBuyNow() {
+	p.getLotsFromDB()
+	if len(p.lots) == 0 {
+		fmt.Println("Отсутствуют лоты для проверки")
+		return
+	}
+	p.getBuyNowLots()
+	p.clearOldLots()
+	p.insertLots()
+}
+
 func (p *Parser) getAuctions() {
 	fmt.Println("Начато получение Аукционов")
 	js := `(() => {
@@ -184,7 +202,6 @@ func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot) {
 
 		lot.BuyNow = strconv.FormatBool(buyNow)
 		buyNowLots <- lot
-		fmt.Println(buyNow)
 		cancel()
 		chromedp.Cancel(ctx)
 	}

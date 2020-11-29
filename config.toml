@@ -1,0 +1,1 @@
+database_url = "root:@tcp(localhost:3306)/parser"

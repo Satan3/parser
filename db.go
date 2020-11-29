@@ -1,11 +1,23 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"strconv"
 	"strings"
 )
+
+func newDb(config *Config) (*sql.DB, error) {
+	db, err := sql.Open("mysql", config.DatabaseURL)
+	if err != nil {
+		return nil, err
+	}
+	if err = db.Ping(); err != nil {
+		return nil, err
+	}
+	return db, nil
+}
 
 func (p *Parser) insertLots() {
 	queryTemplate := "INSERT INTO lots (lot, year, vin, buyNow) VALUES "
