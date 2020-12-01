@@ -8,6 +8,7 @@ import (
 	"log"
 	"runtime"
 	"strconv"
+	"sync"
 )
 
 const (
@@ -161,13 +162,16 @@ func (p *Parser) getLots(tasks chan Auction, lotsChan chan []Lot) {
 }
 
 func (p *Parser) getBuyNowLots() {
+	wg := sync.WaitGroup{}
 	count := len(p.lots)
+	fmt.Println("Лотов для проверки ", count)
 	tasksChan := make(chan Lot, count)
-	buyNowChan := make(chan Lot, count)
+	buyNowChan := make(chan Lot, count/2)
 	workersCount := runtime.NumCPU()
 
 	for i := 0; i < workersCount; i++ {
-		go p.getBuyNow(tasksChan, buyNowChan)
+		wg.Add(1)
+		go p.getBuyNow(tasksChan, buyNowChan, &wg)
 	}
 
 	for _, lot := range p.lots {
@@ -176,14 +180,20 @@ func (p *Parser) getBuyNowLots() {
 	p.lots = p.lots[0:0]
 	close(tasksChan)
 
-	for i := 0; i < count; i++ {
-		p.lots = append(p.lots, <-buyNowChan)
-		fmt.Printf("Обработано %d лотов из %d \n", i+1, count)
+	go func() {
+		wg.Wait()
+		close(buyNowChan)
+	}()
+
+	var current int
+	for lot := range buyNowChan {
+		p.lots = append(p.lots, lot)
+		current++
+		fmt.Printf("Обработано %d лотов \n", current)
 	}
-	close(buyNowChan)
 }
 
-func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot) {
+func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot, wg *sync.WaitGroup) {
 	var buyNow bool
 	for lot := range tasks {
 		ctx, cancel := chromedp.NewContext(p.mainContext)
@@ -205,4 +215,5 @@ func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot) {
 		cancel()
 		chromedp.Cancel(ctx)
 	}
+	wg.Done()
 }

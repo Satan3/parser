@@ -46,6 +46,7 @@ func main() {
 
 	if actionType != "parse" {
 		parser.actualizeBuyNow()
+		fmt.Printf("Время выполнения %g секунд\n", time.Now().Sub(now).Seconds())
 		return
 	}
 	parser.parse()
