@@ -1,1 +1,1 @@
-database_url = "root:@tcp(localhost:3306)/parser"
+database_url = "go:checkvin@tcp(localhost:3306)/lots"

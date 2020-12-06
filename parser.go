@@ -167,7 +167,7 @@ func (p *Parser) getBuyNowLots() {
 	fmt.Println("Лотов для проверки ", count)
 	tasksChan := make(chan Lot, count)
 	buyNowChan := make(chan Lot, count/2)
-	workersCount := runtime.NumCPU()
+	workersCount := runtime.NumCPU() * 2
 
 	for i := 0; i < workersCount; i++ {
 		wg.Add(1)
