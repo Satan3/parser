@@ -94,7 +94,7 @@ func (p *Parser) getAllLots() {
 	count := len(p.auctions)
 	auctionsChan := make(chan Auction, count)
 	lotsChan := make(chan []Lot, count)
-	workerCount := runtime.NumCPU()
+	workerCount := runtime.NumCPU() * 3
 
 	for i := 0; i < workerCount; i++ {
 		go p.getLots(auctionsChan, lotsChan)
