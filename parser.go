@@ -171,7 +171,8 @@ func (p *Parser) getBuyNowLots() {
 
 	for i := 0; i < workersCount; i++ {
 		wg.Add(1)
-		go p.getBuyNow(tasksChan, buyNowChan, &wg)
+		ctx, cancel := chromedp.NewContext(p.mainContext)
+		go p.getBuyNow(tasksChan, buyNowChan, &wg, ctx, cancel)
 	}
 
 	for _, lot := range p.lots {
@@ -181,8 +182,11 @@ func (p *Parser) getBuyNowLots() {
 	close(tasksChan)
 
 	go func() {
+		fmt.Println("start waiting")
 		wg.Wait()
+		fmt.Println("end waiting")
 		close(buyNowChan)
+		p.cancel()
 	}()
 
 	var current int
@@ -193,12 +197,12 @@ func (p *Parser) getBuyNowLots() {
 	}
 }
 
-func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot, wg *sync.WaitGroup) {
+func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot, wg *sync.WaitGroup, ctx context.Context, cancel context.CancelFunc) {
 	var buyNow bool
 	for lot := range tasks {
-		ctx, cancel := chromedp.NewContext(p.mainContext)
 		if err := chromedp.Run(ctx, chromedp.Navigate(lot.Lot)); err != nil {
 			fmt.Println("Не удалось зайти на страницу результатов аукциона", lot.Lot)
+			continue
 		}
 		js := `(() => {
 		return JSON.parse(document.querySelectorAll("#ProductDetailsVM")[0].innerText)["VehicleDetailsViewModel"]["BuyNowInd"];
@@ -208,12 +212,14 @@ func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot, wg *sync.WaitGro
 			chromedp.WaitReady(`#ProductDetailsVM`),
 			chromedp.Evaluate(js, &buyNow)); err != nil {
 			fmt.Println("Ошибка обработки лота ", lot.Lot)
+			continue
 		}
 
 		lot.BuyNow = strconv.FormatBool(buyNow)
+		fmt.Println(buyNow)
 		buyNowLots <- lot
-		cancel()
-		chromedp.Cancel(ctx)
 	}
+	cancel()
+	fmt.Println("Worker closed")
 	wg.Done()
 }

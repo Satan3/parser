@@ -6,6 +6,7 @@ import (
 	"github.com/BurntSushi/toml"
 	_ "github.com/go-sql-driver/mysql"
 	"log"
+	"os"
 	"time"
 )
 
@@ -47,8 +48,9 @@ func main() {
 	if actionType != "parse" {
 		parser.actualizeBuyNow()
 		fmt.Printf("Время выполнения %g секунд\n", time.Now().Sub(now).Seconds())
-		return
+		os.Exit(0)
 	}
 	parser.parse()
 	fmt.Printf("Время выполнения %g секунд\n", time.Now().Sub(now).Seconds())
+	os.Exit(0)
 }
