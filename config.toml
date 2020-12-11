@@ -1,1 +1,4 @@
 database_url = "go:checkvin@tcp(localhost:3306)/lots"
+goroutines_multiplier = 10
+send_to = "database"
+telegram_bot_key = "983350736:AAEfyOMkXeWhbFJYKaayVUD5JVj6fyHwv_4"
