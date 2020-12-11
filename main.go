@@ -41,16 +41,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
 	parser := NewParser(db)
-	defer parser.cancel()
+	defer db.Close()
 
-	if actionType != "parse" {
-		parser.actualizeBuyNow()
-		fmt.Printf("Время выполнения %g секунд\n", time.Now().Sub(now).Seconds())
-		os.Exit(0)
+	switch actionType {
+	case "parse":
+		defer parser.cancel()
+		parser.parse()
+	default:
+		parser.actualizeBuyNow(config)
 	}
-	parser.parse()
+
 	fmt.Printf("Время выполнения %g секунд\n", time.Now().Sub(now).Seconds())
 	os.Exit(0)
 }

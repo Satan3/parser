@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/chromedp/chromedp"
 	"log"
+	"net/http"
+	"regexp"
 	"runtime"
-	"strconv"
 	"sync"
 )
 
@@ -36,29 +38,40 @@ type Parser struct {
 }
 
 func NewParser(db *sql.DB) *Parser {
-	ctx, cancel := chromedp.NewContext(context.Background(), chromedp.WithLogf(log.Printf))
 	return &Parser{
-		db:          db,
-		mainContext: ctx,
-		cancel:      cancel,
-		lots:        make([]Lot, 0, 3000),
+		db:   db,
+		lots: make([]Lot, 0, 3000),
 	}
 }
 
+func (p *Parser) initMainContext() {
+	ctx, cancel := chromedp.NewContext(
+		context.Background(),
+		chromedp.WithLogf(log.Printf),
+	)
+	p.mainContext = ctx
+	p.cancel = cancel
+}
+
 func (p *Parser) parse() {
+	p.initMainContext()
 	p.getAuctions()
 	p.getAllLots()
 	p.clearOldLots()
 	p.insertLots()
 }
 
-func (p *Parser) actualizeBuyNow() {
+func (p *Parser) actualizeBuyNow(config *Config) {
 	p.getLotsFromDB()
 	if len(p.lots) == 0 {
 		fmt.Println("Отсутствуют лоты для проверки")
 		return
 	}
-	p.getBuyNowLots()
+	p.getBuyNowLots(config.GoroutinesMultiplier)
+	if config.SendTo == "telegram" {
+		p.sendToTelegram(config.TelegramBotKey)
+		return
+	}
 	p.clearOldLots()
 	p.insertLots()
 }
@@ -161,18 +174,16 @@ func (p *Parser) getLots(tasks chan Auction, lotsChan chan []Lot) {
 	}
 }
 
-func (p *Parser) getBuyNowLots() {
+func (p *Parser) getBuyNowLots(goroutinesMultiplier int) {
 	wg := sync.WaitGroup{}
 	count := len(p.lots)
 	fmt.Println("Лотов для проверки ", count)
 	tasksChan := make(chan Lot, count)
-	buyNowChan := make(chan Lot, count/2)
-	workersCount := runtime.NumCPU()
-
+	buyNowChan := make(chan Lot, count)
+	workersCount := runtime.NumCPU() * goroutinesMultiplier
 	for i := 0; i < workersCount; i++ {
 		wg.Add(1)
-		ctx, cancel := chromedp.NewContext(p.mainContext)
-		go p.getBuyNow(tasksChan, buyNowChan, &wg, ctx, cancel)
+		go p.getBuyNow(tasksChan, buyNowChan, &wg)
 	}
 
 	for _, lot := range p.lots {
@@ -182,11 +193,8 @@ func (p *Parser) getBuyNowLots() {
 	close(tasksChan)
 
 	go func() {
-		fmt.Println("start waiting")
 		wg.Wait()
-		fmt.Println("end waiting")
 		close(buyNowChan)
-		p.cancel()
 	}()
 
 	var current int
@@ -197,29 +205,36 @@ func (p *Parser) getBuyNowLots() {
 	}
 }
 
-func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot, wg *sync.WaitGroup, ctx context.Context, cancel context.CancelFunc) {
-	var buyNow bool
+func (p *Parser) getBuyNow(tasks chan Lot, buyNowLots chan Lot, wg *sync.WaitGroup) {
 	for lot := range tasks {
-		if err := chromedp.Run(ctx, chromedp.Navigate(lot.Lot)); err != nil {
-			fmt.Println("Не удалось зайти на страницу результатов аукциона", lot.Lot)
+		res, err := http.Get(lot.Lot)
+		if err != nil {
+			fmt.Println(err)
 			continue
 		}
-		js := `(() => {
-		return JSON.parse(document.querySelectorAll("#ProductDetailsVM")[0].innerText)["VehicleDetailsViewModel"]["BuyNowInd"];
-		})();`
+		if res.StatusCode != 200 {
+			fmt.Printf("status code error: %d %s \n", res.StatusCode, res.Status)
+		}
 
-		if err := chromedp.Run(ctx,
-			chromedp.WaitReady(`#ProductDetailsVM`),
-			chromedp.Evaluate(js, &buyNow)); err != nil {
-			fmt.Println("Ошибка обработки лота ", lot.Lot)
+		doc, err := goquery.NewDocumentFromReader(res.Body)
+		if err != nil {
+			fmt.Println(err)
 			continue
 		}
 
-		lot.BuyNow = strconv.FormatBool(buyNow)
-		fmt.Println(buyNow)
-		buyNowLots <- lot
+		selection := doc.Find("#ProductDetailsVM")
+		regExp := regexp.MustCompile(`"BuyNowInd":(\w+),`)
+		result := regExp.FindStringSubmatch(selection.Text())
+
+		if len(result) == 2 && result[1] == "true" {
+			lot.BuyNow = result[1]
+			buyNowLots <- lot
+		}
+		res.Body.Close()
 	}
-	cancel()
-	fmt.Println("Worker closed")
 	wg.Done()
+}
+
+func (p *Parser) sendToTelegram(telegramBotKey string) {
+	fmt.Println(telegramBotKey)
 }
