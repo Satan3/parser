@@ -20,6 +20,10 @@ func newDb(config *Config) (*sql.DB, error) {
 }
 
 func (p *Parser) insertLots() {
+	if len(p.lots) == 0 {
+		fmt.Println("Отсутствуют лоты для сохранения")
+		return
+	}
 	queryTemplate := "INSERT INTO lots (lot, year, vin, buyNow) VALUES "
 	valuesStr := "(?, ?, ?, ?)"
 
